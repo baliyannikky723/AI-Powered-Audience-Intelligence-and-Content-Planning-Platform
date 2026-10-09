@@ -1,0 +1,226 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..700;1,14..32,300..700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  /* ─── Surfaces ─────────────────────────────── */
+  --color-page:       #F7F6F3;
+  --color-surface:    #FFFFFF;
+  --color-surface-2:  #FAFAF8;
+
+  /* ─── Borders ───────────────────────────────── */
+  --color-border:        #E7E5E0;
+  --color-border-strong: #D6D3CC;
+
+  /* ─── Ink / Text ────────────────────────────── */
+  --color-ink:   #1C1B19;
+  --color-ink-2: #57534E;
+  --color-ink-3: #8A857E;
+
+  /* ─── Accent — Indigo ────────────────────────── */
+  --color-accent:      #4F46E5;
+  --color-accent-hover:#4338CA;
+  --color-accent-soft: #EEF2FF;
+  --color-accent-ink:  #3730A3;
+
+  /* ─── Semantic ───────────────────────────────── */
+  --color-success:        #15803D;
+  --color-success-soft:   #F0FDF4;
+  --color-success-border: #BBF7D0;
+  --color-warning:        #B45309;
+  --color-warning-soft:   #FFFBEB;
+  --color-warning-border: #FDE68A;
+  --color-danger:         #B91C1C;
+  --color-danger-soft:    #FEF2F2;
+  --color-danger-border:  #FECACA;
+  --color-info:           #0369A1;
+  --color-info-soft:      #F0F9FF;
+  --color-info-border:    #BAE6FD;
+
+  /* ─── Typography Scale ───────────────────────── */
+  /* page-title: 22px/600  section-title: 16px/600
+     card-title:14px/600   body: 14px/400
+     caption: 12px/400     kpi: 26px/600           */
+
+  /* ─── Font ───────────────────────────────────── */
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+
+  /* ─── Spacing tokens ─────────────────────────── */
+  /* page: 24px   mobile-page: 16px   card: 16-20px
+     grid-gap: 16px   max-width: 1280px              */
+
+  /* ─── Animations ─────────────────────────────── */
+  --animate-fade-in:       fadeIn 0.15s ease-out forwards;
+  --animate-slide-up:      slideUp 0.2s ease-out forwards;
+  --animate-slide-in-left: slideInLeft 0.22s ease-out forwards;
+  --animate-scale-in:      scaleIn 0.15s ease-out forwards;
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0);   }
+  }
+  @keyframes slideInLeft {
+    from { transform: translateX(-100%); }
+    to   { transform: translateX(0);     }
+  }
+  @keyframes scaleIn {
+    from { opacity: 0; transform: scale(0.96); }
+    to   { opacity: 1; transform: scale(1);    }
+  }
+}
+
+/* ── Reset & Base ───────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  @apply bg-page text-ink font-sans antialiased;
+  font-size: 14px;
+  line-height: 1.5714;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Focus ring ─────────────────────────────────── */
+*:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ── Selection ──────────────────────────────────── */
+::selection {
+  background: var(--color-accent-soft);
+  color: var(--color-accent-ink);
+}
+
+/* ── Scrollbars ─────────────────────────────────── */
+::-webkit-scrollbar        { width: 6px; height: 6px; }
+::-webkit-scrollbar-track  { background: transparent; }
+::-webkit-scrollbar-thumb  {
+  background: var(--color-border-strong);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--color-ink-3); }
+
+/* ── Panel utility (replaces glass-panel) ──────── */
+@utility panel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(28, 27, 25, 0.04), 0 1px 2px rgba(28, 27, 25, 0.03);
+}
+
+/* ── Flat surface (no shadow) ───────────────────── */
+@utility panel-flat {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+}
+
+/* ── Form input utility (replaces glass-input) ─── */
+@utility form-input {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-ink);
+  font-size: 14px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+
+  &:hover:not(:disabled) {
+    border-color: var(--color-border-strong);
+  }
+  &:focus {
+    outline: none;
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+  }
+  &::placeholder {
+    color: var(--color-ink-3);
+  }
+  &:disabled {
+    background: var(--color-surface-2);
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+}
+
+/* ── Sidebar link ───────────────────────────────── */
+@utility sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-ink-2);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  user-select: none;
+
+  &:hover {
+    background: var(--color-surface-2);
+    color: var(--color-ink);
+  }
+}
+
+@utility sidebar-link-active {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  font-weight: 600;
+
+  &:hover {
+    background: var(--color-accent-soft);
+    color: var(--color-accent);
+  }
+}
+
+/* ── Divider ─────────────────────────────────────── */
+@utility divider {
+  height: 1px;
+  background: var(--color-border);
+  margin: 8px 0;
+}
+
+/* ── Data table ──────────────────────────────────── */
+@utility data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+
+  & thead th {
+    padding: 8px 12px;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-ink-3);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    background: var(--color-surface-2);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  & tbody td {
+    padding: 10px 12px;
+    color: var(--color-ink);
+    border-bottom: 1px solid var(--color-border);
+    vertical-align: middle;
+  }
+
+  & tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  & tbody tr:hover td {
+    background: var(--color-surface-2);
+  }
+}
+
+/* ── Recharts overrides ──────────────────────────── */
+.recharts-tooltip-wrapper { z-index: 20; }
+.recharts-cartesian-axis-tick text { fill: var(--color-ink-3); font-size: 12px; }
+.recharts-cartesian-grid line { stroke: var(--color-border); }
