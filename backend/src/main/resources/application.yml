@@ -1,0 +1,100 @@
+spring:
+  application:
+    name: PulseGPT-Backend
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  threads:
+    virtual:
+      enabled: true
+
+server:
+  port: ${SERVER_PORT:8080}
+  servlet:
+    context-path: /api/v1
+  shutdown: graceful
+
+# Actuator Configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when_authorized
+      probes:
+        enabled: true
+  info:
+    env:
+      enabled: true
+
+# OpenAPI / Swagger
+springdoc:
+  api-docs:
+    path: /docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+
+# Application Custom Properties
+app:
+  jwt:
+    secret: ${JWT_SECRET:your_super_secret_jwt_key_that_is_at_least_256_bits_long_for_hmac_sha256_pulsegpt_2026}
+    expiration-ms: ${JWT_EXPIRATION_MS:900000} # 15 minutes
+    refresh-expiration-ms: ${JWT_REFRESH_EXPIRATION_MS:604800000} # 7 days
+  cookie:
+    name: pulsegpt_refresh_token
+    http-only: true
+    secure: ${COOKIE_SECURE:false}
+    same-site: Lax
+    path: /api/v1/auth
+    max-age-seconds: 604800
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}
+    allowed-methods: GET,POST,PUT,DELETE,PATCH,OPTIONS
+    allowed-headers: "*"
+    allow-credentials: true
+    max-age-seconds: 3600
+  rate-limit:
+    login-capacity: 5
+    login-refill-tokens: 5
+    login-duration-minutes: 1
+    user-capacity: 120
+    user-refill-tokens: 120
+    user-duration-minutes: 1
+    ai-capacity: 10
+    ai-refill-tokens: 10
+    ai-duration-minutes: 1
+    sync-capacity: ${SYNC_RATE_LIMIT_CAPACITY:3}
+    sync-refill-tokens: ${SYNC_RATE_LIMIT_REFILL:3}
+    sync-duration-minutes: ${SYNC_RATE_LIMIT_DURATION:10}
+  youtube:
+    client-id: ${YOUTUBE_CLIENT_ID:}
+    client-secret: ${YOUTUBE_CLIENT_SECRET:}
+    redirect-uri: ${YOUTUBE_REDIRECT_URI:http://localhost:8080/api/v1/integrations/youtube/callback}
+    frontend-redirect-success-url: ${FRONTEND_REDIRECT_SUCCESS_URL:http://localhost:5173/app/integrations?status=success}
+    frontend-redirect-error-url: ${FRONTEND_REDIRECT_ERROR_URL:http://localhost:5173/app/integrations?status=error}
+    token-encryption-key: ${YOUTUBE_TOKEN_ENCRYPTION_KEY:01234567890123456789012345678901}
+    initial-sync-days: ${YOUTUBE_INITIAL_SYNC_DAYS:90}
+    max-videos-per-sync: ${YOUTUBE_MAX_VIDEOS_PER_SYNC:50}
+    max-comments-per-video: ${YOUTUBE_MAX_COMMENTS_PER_VIDEO:100}
+    quota-limit: ${YOUTUBE_QUOTA_LIMIT:10000}
+    quota-warning-threshold: ${YOUTUBE_QUOTA_WARNING_THRESHOLD:80}
+    quota-stop-threshold: ${YOUTUBE_QUOTA_STOP_THRESHOLD:90}
+  ai-service:
+    base-url: ${AI_SERVICE_BASE_URL:http://localhost:8000}
+    internal-api-key: ${AI_SERVICE_API_KEY:pulse-internal-secret-key-3f8a9e}
+    timeout-ms: ${AI_SERVICE_TIMEOUT_MS:10000}
+    max-batch-size: ${AI_SERVICE_MAX_BATCH_SIZE:32}
+    retry-attempts: 3
+    backoff-delay-ms: 500
+  memory:
+    enabled: ${AUDIENCE_MEMORY_ENABLED:true}
+    half-life-days: ${MEMORY_HALF_LIFE_DAYS:45}
+    evidence-window-days: ${MEMORY_EVIDENCE_WINDOW_DAYS:180}
+    active-threshold: ${MEMORY_ACTIVE_THRESHOLD:0.60}
+    weakening-threshold: ${MEMORY_WEAKENING_THRESHOLD:0.30}
+    max-confidence: 0.99
+    confidence-scale-factor: 200.0
