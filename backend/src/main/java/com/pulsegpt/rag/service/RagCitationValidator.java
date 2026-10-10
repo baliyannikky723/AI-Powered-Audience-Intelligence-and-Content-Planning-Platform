@@ -19,6 +19,7 @@ import java.util.stream.Collectors;
 public class RagCitationValidator {
 
     private static final Pattern CITATION_PATTERN = Pattern.compile("\\[E(\\d+)\\]");
+    private static final Pattern MALFORMED_CITATION_PATTERN = Pattern.compile("(\\[E[a-zA-Z_-]+\\]|\\[citation[^\\]]*\\]|\\[ref[^\\]]*\\])", Pattern.CASE_INSENSITIVE);
     private static final Pattern EMAIL_PATTERN = Pattern.compile("[\\w\\.-]+@[\\w\\.-]+\\.\\w+");
     private static final Pattern PHONE_PATTERN = Pattern.compile("\\b\\d{3}[-.\\s]?\\d{3}[-.\\s]?\\d{4}\\b");
     private static final Pattern SECRET_PATTERN = Pattern.compile("(pulse-|sk-|ey[A-Za-z0-9-_]{20,})", Pattern.CASE_INSENSITIVE);
@@ -42,6 +43,11 @@ public class RagCitationValidator {
         List<String> invalidCitations = new ArrayList<>();
         int validCitationsCount = 0;
 
+        Matcher malformedMatcher = MALFORMED_CITATION_PATTERN.matcher(answer);
+        while (malformedMatcher.find()) {
+            invalidCitations.add(malformedMatcher.group() + " (Malformed Citation)");
+        }
+
         for (String token : citedTokens) {
             RagEvidenceItem item = citationMap.get(token);
             if (item == null) {
@@ -59,7 +65,7 @@ public class RagCitationValidator {
             checks.add(new RagValidationCheckResult(
                     "CITATION_VALIDITY",
                     false,
-                    "Detected fabricated or unauthorized citation IDs: " + invalidCitations
+                    "Detected fabricated, malformed, or unauthorized citation IDs: " + invalidCitations
             ));
         } else if (mode == RagMode.FULL_EVIDENCE_GROUNDED && citedTokens.isEmpty() && !evidence.isEmpty()) {
             checks.add(new RagValidationCheckResult(
@@ -105,7 +111,9 @@ public class RagCitationValidator {
         if (trendMatcher.find()) {
             String trendClaim = trendMatcher.group();
             boolean hasGraphOrTrendEvidence = evidence.stream()
-                    .anyMatch(e -> e.sourceType() == EvidenceSourceType.MEMORY || e.sourceType() == EvidenceSourceType.TOPIC);
+                    .anyMatch(e -> e.sourceType() == EvidenceSourceType.MEMORY
+                            || e.sourceType() == EvidenceSourceType.TOPIC
+                            || e.sourceType() == EvidenceSourceType.TREND);
 
             if (!hasGraphOrTrendEvidence) {
                 checks.add(new RagValidationCheckResult(

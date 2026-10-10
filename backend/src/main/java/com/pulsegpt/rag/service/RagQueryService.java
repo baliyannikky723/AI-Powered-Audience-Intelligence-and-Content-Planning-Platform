@@ -189,13 +189,16 @@ public class RagQueryService {
             }
         }
 
-        // 2. Structured Retrieval (Topics, Questions, Content History)
+        // 2. Structured Retrieval (Topics, Questions, Trends, Content History, Previous Recommendations)
         if (mode == RagMode.GRAPH_AUGMENTED || mode == RagMode.FULL_EVIDENCE_GROUNDED) {
             try {
                 structuredEvidence = structuredRetrievalService.retrieveStructuredEvidence(
                         user.getId(),
                         query.topicId(),
-                        query.queryText()
+                        query.queryText(),
+                        query.includeQuestions(),
+                        query.includeTrends(),
+                        query.includeContentHistory()
                 );
             } catch (Exception e) {
                 log.warn("Structured retrieval error for user {}: {}", user.getId(), e.getMessage());
@@ -203,7 +206,8 @@ public class RagQueryService {
         }
 
         // 3. Neo4j Graph Memory Retrieval
-        if (mode == RagMode.GRAPH_AUGMENTED || mode == RagMode.FULL_EVIDENCE_GROUNDED) {
+        if ((mode == RagMode.GRAPH_AUGMENTED || mode == RagMode.FULL_EVIDENCE_GROUNDED)
+                && !Boolean.FALSE.equals(query.includeMemory())) {
             try {
                 graphMemory = knowledgeGraphQueryService.getAudienceMemoryContext(user.getId());
             } catch (Exception e) {

@@ -83,7 +83,58 @@ class RagCitationValidatorTest {
         );
 
         assertThat(result.valid()).isFalse();
-        assertThat(result.failureSummary()).contains("Detected fabricated or unauthorized citation IDs");
+        assertThat(result.failureSummary()).contains("Detected fabricated, malformed, or unauthorized citation IDs");
+    }
+
+    @Test
+    @DisplayName("Should fail validation when malformed citation formats are detected")
+    void testMalformedCitationFails() {
+        List<RagEvidenceItem> evidence = List.of(
+                RagEvidenceItem.builder()
+                        .citationId("[E1]")
+                        .evidenceId("topic:1")
+                        .sourceType(EvidenceSourceType.TOPIC)
+                        .sourceId("t1")
+                        .userId(userId)
+                        .text("Spring Boot")
+                        .evidenceScore(0.9)
+                        .build()
+        );
+
+        String answer = "We recommend topic X [E1] and invalid reference [Eabc].";
+
+        RagValidationResult result = validator.validateRagAnswer(
+                answer, evidence, RagMode.FULL_EVIDENCE_GROUNDED, userId
+        );
+
+        assertThat(result.valid()).isFalse();
+        assertThat(result.failureSummary()).contains("Malformed Citation");
+    }
+
+    @Test
+    @DisplayName("Should fail validation when cross-tenant citation is referenced")
+    void testCrossTenantCitationFails() {
+        UUID otherUser = UUID.randomUUID();
+        List<RagEvidenceItem> evidence = List.of(
+                RagEvidenceItem.builder()
+                        .citationId("[E1]")
+                        .evidenceId("topic:1")
+                        .sourceType(EvidenceSourceType.TOPIC)
+                        .sourceId("t1")
+                        .userId(otherUser)
+                        .text("Confidential competitor data")
+                        .evidenceScore(0.9)
+                        .build()
+        );
+
+        String answer = "According to competitor data [E1], target audience is shifting.";
+
+        RagValidationResult result = validator.validateRagAnswer(
+                answer, evidence, RagMode.FULL_EVIDENCE_GROUNDED, userId
+        );
+
+        assertThat(result.valid()).isFalse();
+        assertThat(result.failureSummary()).contains("Cross-Tenant Citation");
     }
 
     @Test
@@ -110,6 +161,55 @@ class RagCitationValidatorTest {
         assertThat(result.valid()).isFalse();
         assertThat(result.unsupportedClaimsDetected()).isTrue();
         assertThat(result.failureSummary()).contains("Unsubstantiated quantitative claim detected");
+    }
+
+    @Test
+    @DisplayName("Should pass trend claim when backed by EvidenceSourceType.TREND")
+    void testTrendClaimSupportedByTrendEvidence() {
+        List<RagEvidenceItem> evidence = List.of(
+                RagEvidenceItem.builder()
+                        .citationId("[E1]")
+                        .evidenceId("trend:1")
+                        .sourceType(EvidenceSourceType.TREND)
+                        .sourceId("tr1")
+                        .userId(userId)
+                        .text("Emerging Trend: AI Agents")
+                        .evidenceScore(0.9)
+                        .build()
+        );
+
+        String answer = "Audience has growing interest in AI Agents [E1].";
+
+        RagValidationResult result = validator.validateRagAnswer(
+                answer, evidence, RagMode.FULL_EVIDENCE_GROUNDED, userId
+        );
+
+        assertThat(result.valid()).isTrue();
+    }
+
+    @Test
+    @DisplayName("Should fail when FULL_EVIDENCE_GROUNDED response omits all citations")
+    void testFullEvidenceGroundedRequiresCitation() {
+        List<RagEvidenceItem> evidence = List.of(
+                RagEvidenceItem.builder()
+                        .citationId("[E1]")
+                        .evidenceId("topic:1")
+                        .sourceType(EvidenceSourceType.TOPIC)
+                        .sourceId("t1")
+                        .userId(userId)
+                        .text("Spring Boot")
+                        .evidenceScore(0.9)
+                        .build()
+        );
+
+        String answer = "General statement with no citations whatsoever.";
+
+        RagValidationResult result = validator.validateRagAnswer(
+                answer, evidence, RagMode.FULL_EVIDENCE_GROUNDED, userId
+        );
+
+        assertThat(result.valid()).isFalse();
+        assertThat(result.failureSummary()).contains("Evidence-grounded response should cite at least one supporting evidence item");
     }
 
     @Test

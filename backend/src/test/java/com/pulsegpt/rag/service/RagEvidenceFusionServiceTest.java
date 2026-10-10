@@ -114,4 +114,112 @@ class RagEvidenceFusionServiceTest {
         List<EvidenceSourceType> sourceTypes = fused.stream().map(RagEvidenceItem::sourceType).toList();
         assertThat(sourceTypes).contains(EvidenceSourceType.COMMENT, EvidenceSourceType.TOPIC, EvidenceSourceType.MEMORY);
     }
+
+    @Test
+    @DisplayName("Should eliminate redundant items via cross-source semantic deduplication (>= 0.90 similarity)")
+    void testCrossSourceSemanticDeduplication() {
+        RagEvidenceItem item1 = RagEvidenceItem.builder()
+                .evidenceId("comment:101")
+                .sourceType(EvidenceSourceType.COMMENT)
+                .sourceId("c101")
+                .userId(userId)
+                .text("How do we implement knowledge graph memory decay in spring boot?")
+                .evidenceScore(0.95)
+                .createdAt(Instant.now())
+                .build();
+
+        // item2 has nearly identical phrasing across another source type (QUESTION), lower score (0.80)
+        RagEvidenceItem item2 = RagEvidenceItem.builder()
+                .evidenceId("question:202")
+                .sourceType(EvidenceSourceType.QUESTION)
+                .sourceId("q202")
+                .userId(userId)
+                .text("How do we implement knowledge graph memory decay in spring boot")
+                .evidenceScore(0.80)
+                .createdAt(Instant.now())
+                .build();
+
+        List<RagEvidenceItem> fused = fusionService.fuseEvidence(
+                List.of(item1),
+                List.of(item2),
+                AudienceMemoryContext.empty(),
+                userId,
+                10
+        );
+
+        // One should be deduplicated due to similarity >= 0.90
+        assertThat(fused).hasSize(1);
+        assertThat(fused.get(0).evidenceId()).isEqualTo("comment:101");
+    }
+
+    @Test
+    @DisplayName("Should enforce deterministic tie-breaking when evidence scores are identical")
+    void testDeterministicTieBreaking() {
+        RagEvidenceItem itemA = RagEvidenceItem.builder()
+                .evidenceId("comment:aaa")
+                .sourceType(EvidenceSourceType.COMMENT)
+                .sourceId("a")
+                .userId(userId)
+                .text("Alpha topic feedback")
+                .evidenceScore(0.85)
+                .createdAt(Instant.now())
+                .build();
+
+        RagEvidenceItem itemB = RagEvidenceItem.builder()
+                .evidenceId("comment:bbb")
+                .sourceType(EvidenceSourceType.COMMENT)
+                .sourceId("b")
+                .userId(userId)
+                .text("Beta topic feedback")
+                .evidenceScore(0.85)
+                .createdAt(Instant.now())
+                .build();
+
+        List<RagEvidenceItem> fused1 = fusionService.fuseEvidence(
+                List.of(itemA, itemB), Collections.emptyList(), AudienceMemoryContext.empty(), userId, 10
+        );
+        List<RagEvidenceItem> fused2 = fusionService.fuseEvidence(
+                List.of(itemB, itemA), Collections.emptyList(), AudienceMemoryContext.empty(), userId, 10
+        );
+
+        // Deterministic ordering regardless of input sequence
+        assertThat(fused1.get(0).evidenceId()).isEqualTo(fused2.get(0).evidenceId());
+        assertThat(fused1.get(1).evidenceId()).isEqualTo(fused2.get(1).evidenceId());
+    }
+
+    @Test
+    @DisplayName("Should balance evidence diversity across trends, recommendations, and topics")
+    void testEvidenceDiversityWithTrendsAndRecommendations() {
+        RagEvidenceItem trend = RagEvidenceItem.builder()
+                .evidenceId("trend:1")
+                .sourceType(EvidenceSourceType.TREND)
+                .sourceId("tr1")
+                .userId(userId)
+                .text("Emerging Trend: Observability in Java 21")
+                .evidenceScore(0.88)
+                .createdAt(Instant.now())
+                .build();
+
+        RagEvidenceItem rec = RagEvidenceItem.builder()
+                .evidenceId("recommendation:1")
+                .sourceType(EvidenceSourceType.PREVIOUS_RECOMMENDATION)
+                .sourceId("rec1")
+                .userId(userId)
+                .text("Previous Recommendation: Video series on Micrometer")
+                .evidenceScore(0.79)
+                .createdAt(Instant.now())
+                .build();
+
+        List<RagEvidenceItem> fused = fusionService.fuseEvidence(
+                Collections.emptyList(),
+                List.of(trend, rec),
+                AudienceMemoryContext.empty(),
+                userId,
+                10
+        );
+
+        assertThat(fused).hasSize(2);
+        List<EvidenceSourceType> types = fused.stream().map(RagEvidenceItem::sourceType).toList();
+        assertThat(types).contains(EvidenceSourceType.TREND, EvidenceSourceType.PREVIOUS_RECOMMENDATION);
+    }
 }

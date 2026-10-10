@@ -13,6 +13,10 @@ public record RagQueryRequest(
         String platform,
         UUID topicId,
         Integer maxEvidence,
-        Integer timeRangeDays
+        Integer timeRangeDays,
+        Boolean includeMemory,
+        Boolean includeQuestions,
+        Boolean includeTrends,
+        Boolean includeContentHistory
 ) {
 }

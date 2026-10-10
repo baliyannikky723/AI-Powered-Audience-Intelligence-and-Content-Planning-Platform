@@ -1,11 +1,13 @@
 package com.pulsegpt.rag.controller;
 
+import com.pulsegpt.common.exception.RateLimitExceededException;
 import com.pulsegpt.platform.PlatformType;
 import com.pulsegpt.rag.dto.*;
 import com.pulsegpt.rag.model.RagMode;
 import com.pulsegpt.rag.service.RagEvaluationService;
 import com.pulsegpt.rag.service.RagQueryService;
 import com.pulsegpt.security.CurrentUserService;
+import com.pulsegpt.security.RateLimitingService;
 import com.pulsegpt.user.User;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -27,12 +29,17 @@ public class RagController {
     private final RagQueryService ragQueryService;
     private final RagEvaluationService ragEvaluationService;
     private final CurrentUserService currentUserService;
+    private final RateLimitingService rateLimitingService;
 
     @PostMapping("/query")
     public ResponseEntity<RagQueryResponse> executeRagQuery(@Valid @RequestBody RagQueryRequest request) {
         User user = currentUserService.requireUser();
         log.info("RAG query received from user {}: mode={}, query='{}'",
                 user.getId(), request.generationMode(), request.query());
+
+        if (!rateLimitingService.tryConsumeAi(user.getId())) {
+            throw new RateLimitExceededException("AI generation rate limit exceeded. Max 10 requests per minute.");
+        }
 
         PlatformType platform = null;
         if (request.platform() != null && !request.platform().isBlank()) {
@@ -49,10 +56,10 @@ public class RagController {
                 .topicId(request.topicId())
                 .maxEvidence(request.maxEvidence())
                 .timeRangeDays(request.timeRangeDays())
-                .includeMemory(true)
-                .includeQuestions(true)
-                .includeTrends(true)
-                .includeContentHistory(true)
+                .includeMemory(request.includeMemory() != null ? request.includeMemory() : true)
+                .includeQuestions(request.includeQuestions() != null ? request.includeQuestions() : true)
+                .includeTrends(request.includeTrends() != null ? request.includeTrends() : true)
+                .includeContentHistory(request.includeContentHistory() != null ? request.includeContentHistory() : true)
                 .build();
 
         RagQueryResponse response = ragQueryService.executeRagQuery(user, query);
@@ -79,10 +86,10 @@ public class RagController {
                 .topicId(request.topicId())
                 .maxEvidence(request.maxEvidence())
                 .timeRangeDays(request.timeRangeDays())
-                .includeMemory(true)
-                .includeQuestions(true)
-                .includeTrends(true)
-                .includeContentHistory(true)
+                .includeMemory(request.includeMemory() != null ? request.includeMemory() : true)
+                .includeQuestions(request.includeQuestions() != null ? request.includeQuestions() : true)
+                .includeTrends(request.includeTrends() != null ? request.includeTrends() : true)
+                .includeContentHistory(request.includeContentHistory() != null ? request.includeContentHistory() : true)
                 .build();
 
         RagRetrieveResponse response = ragQueryService.retrieveEvidenceOnly(user, query);

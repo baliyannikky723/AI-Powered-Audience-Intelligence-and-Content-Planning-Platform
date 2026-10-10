@@ -139,9 +139,10 @@ public class RagEvidenceFusionService {
             }
         }
 
-        // 1. Deduplicate by sourceType + sourceId & text uniqueness
+        // 1. Identity Deduplication by sourceType + sourceId
         Map<String, RagEvidenceItem> dedupMap = new LinkedHashMap<>();
         for (RagEvidenceItem item : allRaw) {
+            if (item == null) continue;
             String primaryKey = item.sourceType() + ":" + item.sourceId();
             if (!dedupMap.containsKey(primaryKey)) {
                 dedupMap.put(primaryKey, item);
@@ -153,19 +154,39 @@ public class RagEvidenceFusionService {
             }
         }
 
-        List<RagEvidenceItem> uniqueList = new ArrayList<>(dedupMap.values());
+        List<RagEvidenceItem> candidateList = new ArrayList<>(dedupMap.values());
+        candidateList.sort(DETERMINISTIC_COMPARATOR);
 
-        // 2. Group by SourceType for Diverse Budget Allocation
+        // 2. Cross-Source Semantic Deduplication (threshold >= 0.90)
+        List<RagEvidenceItem> uniqueList = new ArrayList<>();
+        for (RagEvidenceItem item : candidateList) {
+            boolean duplicateFound = false;
+            for (RagEvidenceItem accepted : uniqueList) {
+                double sim = computeSemanticSimilarity(item.text(), accepted.text());
+                if (sim >= 0.90) {
+                    duplicateFound = true;
+                    log.debug("Cross-source semantic deduplication filtered item {} (similarity {} with {})",
+                            item.evidenceId(), sim, accepted.evidenceId());
+                    break;
+                }
+            }
+            if (!duplicateFound) {
+                uniqueList.add(item);
+            }
+        }
+
+        // 3. Group by SourceType for Diverse Budget Allocation across all 6 modalities
         Map<EvidenceSourceType, List<RagEvidenceItem>> byType = uniqueList.stream()
-                .sorted(Comparator.comparingDouble(RagEvidenceItem::evidenceScore).reversed())
+                .sorted(DETERMINISTIC_COMPARATOR)
                 .collect(Collectors.groupingBy(RagEvidenceItem::sourceType));
 
-        // Source Target Quotas
-        int maxComments = Math.min(5, maxBudget);
+        // Source Target Quotas across modalities
+        int maxComments = Math.min(4, maxBudget);
         int maxTopics = 2;
         int maxQuestions = 2;
+        int maxTrends = 2;
         int maxMemory = 2;
-        int maxHistory = 1;
+        int maxHistory = 2;
 
         List<RagEvidenceItem> selected = new ArrayList<>();
         Set<String> addedEvidenceIds = new HashSet<>();
@@ -173,14 +194,16 @@ public class RagEvidenceFusionService {
         addSubset(selected, byType.get(EvidenceSourceType.COMMENT), maxComments, addedEvidenceIds);
         addSubset(selected, byType.get(EvidenceSourceType.TOPIC), maxTopics, addedEvidenceIds);
         addSubset(selected, byType.get(EvidenceSourceType.QUESTION), maxQuestions, addedEvidenceIds);
+        addSubset(selected, byType.get(EvidenceSourceType.TREND), maxTrends, addedEvidenceIds);
         addSubset(selected, byType.get(EvidenceSourceType.MEMORY), maxMemory, addedEvidenceIds);
         addSubset(selected, byType.get(EvidenceSourceType.CONTENT_HISTORY), maxHistory, addedEvidenceIds);
+        addSubset(selected, byType.get(EvidenceSourceType.PREVIOUS_RECOMMENDATION), maxHistory, addedEvidenceIds);
 
         // Fill remaining budget dynamically with highest ranked leftover evidence
         if (selected.size() < maxBudget) {
             List<RagEvidenceItem> leftovers = uniqueList.stream()
                     .filter(item -> !addedEvidenceIds.contains(item.evidenceId()))
-                    .sorted(Comparator.comparingDouble(RagEvidenceItem::evidenceScore).reversed())
+                    .sorted(DETERMINISTIC_COMPARATOR)
                     .toList();
 
             for (RagEvidenceItem item : leftovers) {
@@ -190,10 +213,10 @@ public class RagEvidenceFusionService {
             }
         }
 
-        // 3. Final ranking by evidenceScore descending
-        selected.sort(Comparator.comparingDouble(RagEvidenceItem::evidenceScore).reversed());
+        // 4. Final deterministic ranking by evidenceScore descending, tie-breaking by sourceType & evidenceId
+        selected.sort(DETERMINISTIC_COMPARATOR);
 
-        // 4. Assign deterministic stable citation IDs: [E1], [E2], ...
+        // 5. Assign deterministic stable citation IDs: [E1], [E2], ...
         List<RagEvidenceItem> citedResults = new ArrayList<>();
         for (int i = 0; i < selected.size(); i++) {
             String citationId = "[E" + (i + 1) + "]";
@@ -201,6 +224,39 @@ public class RagEvidenceFusionService {
         }
 
         return citedResults;
+    }
+
+    private static final Comparator<RagEvidenceItem> DETERMINISTIC_COMPARATOR = Comparator
+            .comparingDouble(RagEvidenceItem::evidenceScore).reversed()
+            .thenComparing(item -> item.sourceType() != null ? item.sourceType().name() : "")
+            .thenComparing(item -> item.evidenceId() != null ? item.evidenceId() : "");
+
+    private double computeSemanticSimilarity(String s1, String s2) {
+        if (s1 == null || s2 == null) return 0.0;
+        String t1 = s1.trim().toLowerCase();
+        String t2 = s2.trim().toLowerCase();
+        if (t1.isEmpty() || t2.isEmpty()) return 0.0;
+        if (t1.equals(t2)) return 1.0;
+
+        String[] words1 = t1.split("\\W+");
+        String[] words2 = t2.split("\\W+");
+        Set<String> set1 = new HashSet<>();
+        Set<String> set2 = new HashSet<>();
+        for (String w : words1) {
+            if (!w.isBlank()) set1.add(w);
+        }
+        for (String w : words2) {
+            if (!w.isBlank()) set2.add(w);
+        }
+        if (set1.isEmpty() || set2.isEmpty()) return 0.0;
+
+        Set<String> intersection = new HashSet<>(set1);
+        intersection.retainAll(set2);
+
+        Set<String> union = new HashSet<>(set1);
+        union.addAll(set2);
+
+        return (double) intersection.size() / union.size();
     }
 
     private void addSubset(

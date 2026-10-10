@@ -54,6 +54,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.reset;
@@ -120,6 +121,9 @@ class RagServiceIntegrationTest {
 
     @MockitoBean
     private ContentRecommendationRepository contentRecommendationRepository;
+
+    @MockitoBean
+    private com.pulsegpt.trend.TrendScoreRepository trendScoreRepository;
 
     @MockitoBean
     private EvidenceAnnotationRepository annotationRepository;
@@ -269,6 +273,40 @@ class RagServiceIntegrationTest {
                     .andExpect(jsonPath("$.retrievalMetadata.graphAvailable").value(false))
                     .andExpect(jsonPath("$.retrievalMetadata.retrievalVersion").value("v1.0-baseline"));
         }
+        @Test
+        @DisplayName("POST /api/v1/rag/retrieve should strictly not call LLM text generation")
+        void testRetrieveDoesNotCallLlm() throws Exception {
+            RagQueryRequest request = RagQueryRequest.builder()
+                    .query("Retrieve evidence only")
+                    .generationMode("FULL_EVIDENCE_GROUNDED")
+                    .maxEvidence(5)
+                    .build();
+
+            mockMvc.perform(post("/api/v1/rag/retrieve")
+                            .header(HttpHeaders.AUTHORIZATION, jwtToken)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.evidence").isArray())
+                    .andExpect(jsonPath("$.answer").doesNotExist());
+        }
+
+        @Test
+        @DisplayName("POST /api/v1/rag/retrieve with includeMemory=false should skip graph query")
+        void testRetrieveWithIncludeMemoryFalse() throws Exception {
+            RagQueryRequest request = RagQueryRequest.builder()
+                    .query("Retrieve evidence without graph")
+                    .generationMode("FULL_EVIDENCE_GROUNDED")
+                    .includeMemory(false)
+                    .build();
+
+            mockMvc.perform(post("/api/v1/rag/retrieve")
+                            .header(HttpHeaders.AUTHORIZATION, jwtToken)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.evidence").isArray());
+        }
     }
 
     @Nested
@@ -297,6 +335,39 @@ class RagServiceIntegrationTest {
         }
 
         @Test
+        @DisplayName("POST /api/v1/rag/query in VECTOR_ONLY mode should succeed without graph memory")
+        void testExecuteVectorOnlyMode() throws Exception {
+            RagQueryRequest request = RagQueryRequest.builder()
+                    .query("Vector inquiry only")
+                    .generationMode("VECTOR_ONLY")
+                    .build();
+
+            mockMvc.perform(post("/api/v1/rag/query")
+                            .header(HttpHeaders.AUTHORIZATION, jwtToken)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.answer").isNotEmpty());
+        }
+
+        @Test
+        @DisplayName("POST /api/v1/rag/query in GRAPH_AUGMENTED mode should retrieve graph evidence")
+        void testExecuteGraphAugmentedMode() throws Exception {
+            RagQueryRequest request = RagQueryRequest.builder()
+                    .query("Graph augmented inquiry")
+                    .generationMode("GRAPH_AUGMENTED")
+                    .build();
+
+            mockMvc.perform(post("/api/v1/rag/query")
+                            .header(HttpHeaders.AUTHORIZATION, jwtToken)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.retrievalMetadata.graphAvailable").value(true))
+                    .andExpect(jsonPath("$.answer").isNotEmpty());
+        }
+
+        @Test
         @DisplayName("POST /api/v1/rag/query should gracefully handle Neo4j graph failure fallback")
         void testNeo4jFailureFallback() throws Exception {
             when(knowledgeGraphQueryService.getAudienceMemoryContext(testUser.getId()))
@@ -314,6 +385,33 @@ class RagServiceIntegrationTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.retrievalMetadata.graphAvailable").value(false))
                     .andExpect(jsonPath("$.answer").isNotEmpty());
+        }
+
+        @Test
+        @DisplayName("POST /api/v1/rag/query should enforce 429 rate limit when AI capacity is exhausted")
+        void testRagQueryRateLimiting() throws Exception {
+            RagQueryRequest request = RagQueryRequest.builder()
+                    .query("Repeated inquiry to trigger rate limit")
+                    .generationMode("BASELINE")
+                    .build();
+
+            boolean hitRateLimit = false;
+            // The configured AI capacity is 10 requests per minute
+            for (int i = 0; i < 15; i++) {
+                int statusCode = mockMvc.perform(post("/api/v1/rag/query")
+                                .header(HttpHeaders.AUTHORIZATION, jwtToken)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                        .andReturn()
+                        .getResponse()
+                        .getStatus();
+
+                if (statusCode == 429) {
+                    hitRateLimit = true;
+                    break;
+                }
+            }
+            assertThat(hitRateLimit).isTrue();
         }
     }
 
